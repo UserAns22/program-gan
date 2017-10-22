@@ -1,24 +1,22 @@
 import tensorflow as tf
 import string as sn
-
+import numpy as np
 
 # The location on the disk of project
-PROJECT_BASEDIR = ("C:/Users/brand/Google Drive/" +
-    "Academic/Research/Program Synthesis with Deep Learning/Repo/program-gan/")
-
+PROJECT_BASEDIR = ("/home/ani/Projects/program-gan/")
 
 # The location on the disk of checkpoints
 CHECKPOINT_BASEDIR = (PROJECT_BASEDIR + "Checkpoints/")
 
 
 # The location on the disk of project
-DATASET_BASEDIR = ("C:/Users/brand/Google Drive/" +
-    "Academic/Research/Program Synthesis with Deep Learning/Datasets/")
+DATASET_BASEDIR = PROJECT_BASEDIR
 
-
+DEPTH = 8
+prefix = 'epf_' + str(DEPTH) + '_'
 # Filenames associated with program dataset
 DATASET_FILENAMES_PYTHON = [
-    (DATASET_BASEDIR + "epf_8_dataset.csv")
+    (DATASET_BASEDIR +prefix  + "dataset.csv")
 ]
 
 
@@ -29,7 +27,7 @@ for FILE_PYTHON in DATASET_FILENAMES_PYTHON:
 
 
 # Dataset configuration constants
-DATASET_IO_EXAMPLES = 10
+DATASET_IO_EXAMPLES = 4
 DATASET_COLUMNS = (DATASET_IO_EXAMPLES * 2) + 2
 DATASET_DEFAULT = "0"
 
@@ -94,7 +92,7 @@ def decode_record_python(filename_queue, num_columns=DATASET_COLUMNS, default_va
 
 
 # Batch configuration constants
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 NUM_THREADS = 4
 TOTAL_EXAMPLES = 2015538
 
@@ -231,9 +229,29 @@ def inference_behavior_python(program_batch):
 
 
 # Compute syntax label with rnn
-def inference_syntax_python(program_batch):
+    
+def inference_syntax_python(program_batch, program_batch_code_length):
+    input_batch = tf.identity(program_batch)
 
-    return tf.constant([1.], dtype=tf.float32)
+    lstm_size = len(DATASET_VOCABULARY) * 2
+
+
+    lstm_forward = tf.contrib.rnn.LSTMCell(lstm_size)
+    lstm_backward = tf.contrib.rnn.LSTMCell(lstm_size)
+    initial_state = tf.zeros([BATCH_SIZE, lstm_size])
+
+    outputs, states = tf.nn.bidirectional_dynamic_rnn(lstm_forward, lstm_backward, input_batch,
+            #initial_state_fw =(initial_state), initial_state_bw = (initial_state)
+            dtype = tf.float32,
+            sequence_length = program_batch_code_length)
+    print(outputs[0].shape)
+    print(states[0])
+    cell_states = tf.concat([states[0].c, states[1].c], 1)
+    print(cell_states.shape)
+    softmax_w = tf.get_variable("softmax_w", [2*lstm_size, 1], dtype = tf.float32)
+    softmax_b = tf.get_variable("softmax_b", [1], dtype = tf.float32) 
+    logits = tf.nn.xw_plus_b(cell_states, softmax_w, softmax_b)
+    return logits
 
 
 # Create new graph
@@ -248,7 +266,7 @@ with tf.Graph().as_default():
 
     
     # Compute syntax of corrected code
-    syntax_batch = inference_syntax_python(corrected_batch)
+    syntax_batch = inference_syntax_python(corrected_batch,length_batch)
 
 
     # Compute behavior of corrected code

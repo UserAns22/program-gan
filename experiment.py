@@ -1,6 +1,6 @@
 import tensorflow as tf
 import string as sn
-
+import numpy as np
 
 # The location on the disk of project
 PROJECT_BASEDIR = ("C:/Users/brand/Google Drive/" +
@@ -230,8 +230,55 @@ def inference_behavior_python(program_batch):
     return behavior_function
 
 
+# Non-destructively creates a mutated program batch
+# Runtime is O(BATCH_SIZE * DATASET_MAXIMUM)
+def get_mutated_batch(program_batch):
+
+    # Froce usage of cpu
+    with tf.device("/cpu:0"):
+
+        no_of_mutations = tf.placeholder(tf.int32, shape=(1), name="number of mutations in program")
+
+        vocab_size = len(DATASET_VOCABULARY)
+
+        # initialize the mutated batch
+        mutated_batch = tf.zeros(program_batch.get_shape())
+
+        for i in range(len(mutated_batch)):
+
+            program = mutated_batch[i]
+            original_program = program_batch[i]
+
+            random_mutation_indices = tf.zeros([DATASET_MAXIMUM])  # weird implementation to optimize runtime from O(DATASET_MAXIMUM^2) to O(DATASET_MAXIMUM)
+            no_of_indices_set = 0
+
+            while no_of_indices_set < no_of_mutations:
+
+                # index of a random character to be mutated
+                random_index = np.random_integer(0, high=DATASET_MAXIMUM - 1)
+
+                # making sure we are not mutating the same spot again
+                if random_mutation_indices[random_index] != 1:
+                    random_mutation_indices[random_index] = 1
+                    no_of_indices_set += 1
+
+            for j in range(len(program)):
+
+                # if character at this index is to be mutated, create new random one-hot vec and copy to program
+                if random_mutation_indices[j] == 1:
+                    program[j] = tf.one_hot([np.random_integer(0, high=vocab_size - 1)], vocab_size, dtype=tf.float32)
+                else:
+                    program[j] = original_program[j]  # copy one-hot vec from origin program to new program
+
+    return mutated_batch
+
+
 # Compute syntax label with rnn
 def inference_syntax_python(program_batch):
+
+    # program_batch shape = [batch_size, DATASET_MAXIMUM (max num_steps), len(vocabulary)]
+    # lstm_size should be length of the one-hot vec = len(vocabulary)
+    # state = tensor with shape [batch_size, state_size]
 
     return tf.constant([1.], dtype=tf.float32)
 
